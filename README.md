@@ -1,4 +1,4 @@
-# ansible_k3s
+# Ansible k3s
 Script for installing and configuring k3s in Ansible
 
 ## Example
