@@ -1,0 +1,58 @@
+- name: Ensure curl is installed
+  apt:
+    name: curl
+    state: present
+
+- name: Set hostname
+  hostname:
+    name: "{{ inventory_hostname }}"
+
+- name: Install K3s on master (init cluster)
+  shell: |
+    curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ k3s_version }} sh -s - server \
+      --cluster-init \
+      --tls-san {{ vip }} \
+      --node-name {{ inventory_hostname }}
+  when: inventory_hostname == main_master
+
+- name: Wait for token to be created
+  wait_for:
+    path: "{{ k3s_token_path }}"
+    timeout: 60
+  when: inventory_hostname == main_master
+
+- name: Copy token to control node
+  fetch:
+    src: "{{ k3s_token_path }}"
+    dest: "{{ k3s_token_file }}"
+    flat: true
+  when: inventory_hostname == main_master
+
+- name: Read token from file
+  delegate_to: localhost
+  run_once: true
+  slurp:
+    src: "{{ k3s_token_file }}"
+  register: slurped_token
+
+- name: Set K3S_TOKEN fact
+  set_fact:
+    k3s_token: "{{ slurped_token.content | b64decode | trim }}"
+  run_once: true
+
+- name: Install K3s on other_master
+  shell: |
+    curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ k3s_version }} K3S_TOKEN={{ k3s_token }} sh -s - server \
+      --server https://{{ vip }}:6443 \
+      --tls-san {{ vip }} \
+      --node-name {{ inventory_hostname }}
+  when: inventory_hostname in other_master
+
+- name: Install K3s agent on workers
+  shell: |
+    curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ k3s_version }} K3S_TOKEN={{ k3s_token }} K3S_URL=https://{{ vip }}:6443 sh -s -
+  when: "inventory_hostname.startswith('worker')"
+
+- name: Print status message
+  debug:
+    msg: "K3s installed on {{ inventory_hostname }}"
