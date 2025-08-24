@@ -13,20 +13,20 @@
       --cluster-init \
       --tls-san {{ vip }} \
       --node-name {{ inventory_hostname }}
-  when: inventory_hostname == main_master
+  when: "'MAIN' in group_names"
 
 - name: Wait for token to be created
   wait_for:
     path: "{{ k3s_token_path }}"
     timeout: 60
-  when: inventory_hostname == main_master
+  when: "'MAIN' in group_names"
 
 - name: Copy token to control node
   fetch:
     src: "{{ k3s_token_path }}"
     dest: "{{ k3s_token_file }}"
     flat: true
-  when: inventory_hostname == main_master
+  when: "'MAIN' in group_names"
 
 - name: Read token from file
   delegate_to: localhost
@@ -46,12 +46,12 @@
       --server https://{{ vip }}:6443 \
       --tls-san {{ vip }} \
       --node-name {{ inventory_hostname }}
-  when: inventory_hostname in other_master
+  when: "'MASTER' in group_names and 'MAIN' not in group_names"
 
 - name: Install K3s agent on workers
   shell: |
     curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ k3s_version }} K3S_TOKEN={{ k3s_token }} K3S_URL=https://{{ vip }}:6443 sh -s -
-  when: "inventory_hostname.startswith('worker')"
+  when: "'WORKER' in group_names"
 
 - name: Print status message
   debug:
