@@ -2,6 +2,11 @@
   apt:
     name: curl
     state: present
+    update_cache: yes
+  register: curl_install
+  retries: 5
+  delay: 30
+  until: curl_install is success
 
 - name: Set hostname
   hostname:
